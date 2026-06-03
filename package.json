@@ -1,0 +1,129 @@
+{
+  "name": "optimizely-tools",
+  "displayName": "Optimizely Tools",
+  "description": "Build and push JavaScript, SCSS, and CSS files from VS Code to Optimizely Web Experimentation.",
+  "version": "0.1.0",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:optimizelyTools.pushCurrentFile",
+    "onCommand:optimizelyTools.signIn",
+    "onCommand:optimizelyTools.signOut"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "optimizelyTools.pushCurrentFile",
+        "title": "Push to Optimizely",
+        "icon": {
+          "light": "images/optimizely.svg",
+          "dark": "images/optimizely.svg"
+        }
+      },
+      {
+        "command": "optimizelyTools.signIn",
+        "title": "Optimizely: Save API Token"
+      },
+      {
+        "command": "optimizelyTools.signOut",
+        "title": "Optimizely: Remove API Token"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "optimizelyTools.pushCurrentFile",
+          "when": "resourceExtname == .js || resourceExtname == .scss || resourceExtname == .css",
+          "group": "navigation@1"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "optimizelyTools.pushCurrentFile",
+          "when": "resourceExtname == .js || resourceExtname == .scss || resourceExtname == .css",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "optimizelyTools.pushCurrentFile",
+          "when": "resourceExtname == .js || resourceExtname == .scss || resourceExtname == .css",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "optimizelyTools.pushCurrentFile"
+        },
+        {
+          "command": "optimizelyTools.signIn"
+        },
+        {
+          "command": "optimizelyTools.signOut"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Optimizely Tools",
+      "properties": {
+        "optimizelyTools.apiBaseUrl": {
+          "type": "string",
+          "default": "https://api.optimizely.com",
+          "description": "Base URL for the Optimizely REST API."
+        },
+        "optimizelyTools.defaultProjectId": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null,
+          "description": "Default Optimizely Project ID to use if not specified in a file's comments."
+        },
+        "optimizelyTools.publishOnPush": {
+          "type": "boolean",
+          "default": false,
+          "description": "Call the update endpoint with action=publish after pushing code."
+        },
+        "optimizelyTools.overrideDrafts": {
+          "type": "boolean",
+          "default": false,
+          "description": "Add override_changes=true to update requests when Optimizely reports a draft conflict."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
+    "watch": "npm run compile -- --watch",
+    "package": "npm run compile",
+    "lint": "eslint \"src/**/*.ts\""
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.41",
+    "@types/vscode": "^1.90.0",
+    "@typescript-eslint/eslint-plugin": "^7.13.0",
+    "@typescript-eslint/parser": "^7.13.0",
+    "@vscode/vsce": "^2.29.0",
+    "esbuild": "^0.21.4",
+    "eslint": "^8.57.0",
+    "prettier": "^3.3.2",
+    "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "@babel/core": "^7.29.7",
+    "@babel/preset-env": "^7.29.7",
+    "babel-loader": "^10.1.1",
+    "sass": "^1.100.0",
+    "sass-loader": "^17.0.0",
+    "terser-webpack-plugin": "^5.6.1",
+    "webpack": "^5.107.2",
+    "webpack-cli": "^7.0.3"
+  }
+}
