@@ -1,48 +1,76 @@
 # Optimizely Tools
 
-VS Code extension for building and pushing the current JavaScript, SCSS, or CSS file to Optimizely Web Experimentation.
+Build and push JavaScript, SCSS, and CSS files from VS Code to Optimizely Web Experimentation.
 
-## Features ✨
+## Features
 
-- Adds a `Push to Optimizely` editor title button for `.js`, `.scss`, and `.css` files.
-- Builds JavaScript through webpack as browser ES2015 output before pushing.
-- Compiles SCSS through webpack and pushes the generated CSS.
-- Stores your Optimizely personal or OAuth access token in VS Code Secret Storage.
-- Confirms the selected project, experiment, target, file type, and file path before every push.
-- Supports shared experiment JS/CSS and variation JS/CSS targets.
+- Push `.js`, `.scss`, and `.css` files from the editor title, editor context menu, explorer context menu, or command palette.
+- Build JavaScript through webpack before pushing, with browser ES2015 output.
+- Compile SCSS through webpack and push the generated CSS.
+- Push shared experiment JS/CSS or variation JS/CSS.
+- Store the Optimizely token in VS Code Secret Storage.
+- Confirm the project, experiment, target, and source file before every push.
 
-## Configuration
+## Setup
 
-This extension provides the following settings in VS Code:
+1. Run `npm install`.
+2. Run `npm run package`.
+3. Press `F5` in VS Code to open an Extension Development Host.
+4. Run `Optimizely: Save API Token` from the command palette.
+5. Open a `.js`, `.scss`, or `.css` file and run `Push to Optimizely`.
 
-- `optimizelyTools.defaultProjectId`: A default Optimizely Project ID to use if not specified in the file.
-- `optimizelyTools.apiBaseUrl`: Base URL for the Optimizely REST API. Defaults to `https://api.optimizely.com`.
-- `optimizelyTools.publishOnPush`: If `true`, automatically publishes the experiment after pushing code changes. Defaults to `false`.
-- `optimizelyTools.overrideDrafts`: If `true`, forces the update even if Optimizely reports a draft conflict. Defaults to `false`.
+## File Metadata
 
-## Running for Development
-
-To run and debug the extension locally:
-
-1.  **Install Dependencies**: Open a terminal in the project root and run `npm install`.
-2.  **Build the Extension**: Run `npm run package` to compile and bundle the extension.
-    - For active development, you can run `npm run watch` in a terminal to automatically re-build the extension whenever you save a file.
-3.  **Start Debugging**: Press `F5` in VS Code. This will open a new "[Extension Development Host]" window with your extension loaded.
-4.  **Configure Token**: In the new window, open the Command Palette (`View > Command Palette...`) and run the `Optimizely: Save API Token` command. Paste your Optimizely API token when prompted.
-5.  **Push a File**: Open a `.js`, `.scss`, or `.css` file. You can now use the `Push to Optimizely` command, which is available from:
-    - The Optimizely icon (`$(optimizely-icon)`) in the editor's title bar.
-    - The right-click context menu in the editor or file explorer.
-    - The Command Palette.
-
-**Important**: For the extension to work, ensure your `.js`, `.scss`, or `.css` file includes the `Project Id` and `Experiment Id` in comments within the first 15 lines. For example:
+Each source file must include Optimizely IDs in the first 15 lines.
 
 ```javascript
 // Project Id: 12345
 // Experiment Id: 67890
-// Variation Id: 123
+// Variation Id: 111222333
 ```
 
-## API Notes
+`Project Id` can be omitted if `optimizelyTools.defaultProjectId` is set in VS Code settings.
+
+`Variation Id` is optional. If it is missing, the extension asks which variation to update.
+
+## Push Behavior
+
+Shared experiment code:
+
+- Does not use a page ID.
+- Updates experiment-level `changes`.
+- Sends the full experiment payload back to Optimizely with updated shared code.
+
+Variation code:
+
+- Always resolves a page ID before pushing.
+- If root `page_ids` has one page, that page is used automatically.
+- If root `page_ids` has multiple pages, the extension asks which page to update.
+- If root `page_ids` is not available, page IDs are resolved from variation actions and `url_targeting`.
+- Updates the existing `actions[]` object with the selected `page_id`.
+- Creates a new action with `{ page_id, changes: [...] }` when no action exists for the selected page.
+
+Code changes:
+
+- `.js` pushes as `custom_code`.
+- `.scss` and `.css` push as `custom_css`.
+- Existing Optimizely change IDs are removed from PATCH payloads because they are read-only.
+
+## Configuration
+
+- `optimizelyTools.defaultProjectId`: default project ID when the file does not include `Project Id`.
+- `optimizelyTools.apiBaseUrl`: Optimizely REST API base URL. Defaults to `https://api.optimizely.com`.
+- `optimizelyTools.publishOnPush`: adds `action=publish` to the update request.
+- `optimizelyTools.overrideDrafts`: adds `override_changes=true` to the update request.
+
+## Development Commands
+
+- `npm run package`: bundle the extension into `dist/extension.js`.
+- `npm run watch`: rebuild on source changes.
+- `npm run lint`: lint TypeScript source.
+- `npx tsc --noEmit`: type-check the extension.
+
+## API Endpoints
 
 The extension uses Optimizely Web Experimentation REST API v2:
 
@@ -50,4 +78,11 @@ The extension uses Optimizely Web Experimentation REST API v2:
 - `GET /v2/pages/{page_id}`
 - `PATCH /v2/experiments/{experiment_id}`
 
-Optimizely documents Bearer-token authentication and experiment-level `changes`. Variation custom code is represented inside an experiment's variation objects; this extension updates matching existing custom JS/CSS changes when available and creates a conventional custom code change when no match exists.
+## Publishing Prep
+
+Before publishing to the VS Code Marketplace:
+
+- Replace the local `publisher` value in `package.json`.
+- Add marketplace metadata such as repository, license, keywords, and icon if needed.
+- Run `npm run package`, `npm run lint`, and `npx tsc --noEmit`.
+- Package with `vsce package` and test the generated `.vsix` in a clean VS Code profile.

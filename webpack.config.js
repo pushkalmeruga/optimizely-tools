@@ -6,7 +6,9 @@ module.exports = (env) => {
   // env.destination: output directory for this file
   // env.filename: target JS filename (e.g., control.js, variation-1.js)
   if (!env.entry || !env.destination || !env.filename) {
-    throw new Error("Missing required webpack env values: entry, destination, filename.");
+    throw new Error(
+      "Missing required webpack env values: entry, destination, filename.",
+    );
   }
 
   // Derive the entry/chunk name from the target filename (without extension).
@@ -43,7 +45,7 @@ module.exports = (env) => {
               drop_console: false,
               drop_debugger: true,
               passes: 1,
-              unused: true
+              unused: true,
             },
             mangle: false,
             format: {
@@ -67,7 +69,7 @@ module.exports = (env) => {
               configFile: false,
               presets: [
                 [
-                  "@babel/preset-env",
+                  require.resolve("@babel/preset-env"),
                   {
                     bugfixes: true,
                     modules: false,
@@ -85,7 +87,11 @@ module.exports = (env) => {
           exclude: [/node_modules/],
           use: [
             {
-              loader: path.resolve(__dirname, "loaders", "optimizely-css-output-loader.js"),
+              loader: path.resolve(
+                __dirname,
+                "loaders",
+                "optimizely-css-output-loader.js",
+              ),
               options: {
                 filename: env.filename,
               },
@@ -103,7 +109,11 @@ module.exports = (env) => {
           exclude: [/node_modules/],
           use: [
             {
-              loader: path.resolve(__dirname, "loaders", "optimizely-css-output-loader.js"),
+              loader: path.resolve(
+                __dirname,
+                "loaders",
+                "optimizely-css-output-loader.js",
+              ),
               options: {
                 filename: env.filename,
               },
