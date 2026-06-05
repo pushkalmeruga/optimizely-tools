@@ -4,6 +4,17 @@ All notable changes to the "Optimizely Tools" extension are documented in this f
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.1.3] - 2026-06-05
+
+### Changed
+
+- Replaced the runtime webpack/Babel/Terser build with in-process `esbuild-wasm`
+  (JavaScript) and Dart Sass (SCSS). No subprocess is spawned to compile code.
+- Shrunk the packaged extension from ~6288 files to ~190, resolving the VS Code
+  "should bundle your extension" packaging warning. JavaScript output is now
+  minified by esbuild (identifier names preserved); SCSS is compiled to expanded
+  CSS as before, and plain CSS is still pushed verbatim.
+
 ## [0.1.1] - 2026-06-05
 
 ### Changed

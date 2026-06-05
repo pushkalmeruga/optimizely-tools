@@ -2,11 +2,10 @@ import * as vscode from "vscode";
 import * as https from "node:https";
 import * as http from "node:http";
 import { URL } from "node:url";
-import * as childProcess from "node:child_process";
 import * as fs from "node:fs/promises";
-import * as os from "node:os";
 import * as path from "node:path";
-import { promisify } from "node:util";
+import * as esbuild from "esbuild-wasm";
+import * as sass from "sass";
 
 interface OptimizelyFileIds {
   projectId?: number;
@@ -16,9 +15,16 @@ interface OptimizelyFileIds {
 
 const TOKEN_KEY = "optimizelyTools.apiToken";
 const FILE_ID_SCAN_LINES = 15;
-const WEBPACK_OUTPUT_BUFFER_BYTES = 1024 * 1024 * 5;
-const WEBPACK_TEMP_DIR_PREFIX = "optimizely-tools-webpack-";
-const execFile = promisify(childProcess.execFile);
+
+let esbuildInit: Promise<void> | undefined;
+
+// esbuild-wasm must be initialized once per process before any build call.
+function ensureEsbuild(): Promise<void> {
+  if (!esbuildInit) {
+    esbuildInit = esbuild.initialize({ worker: false });
+  }
+  return esbuildInit;
+}
 
 type CodeKind = "javascript" | "css";
 type TargetKind = "shared" | "variation";
@@ -239,12 +245,8 @@ async function pushCurrentFile(
           return;
         }
 
-        progress.report({ message: "Building with webpack..." });
-        const compiledCode = await buildCodeForPush(
-          context,
-          document,
-          target.codeKind,
-        );
+        progress.report({ message: "Compiling code..." });
+        const compiledCode = await buildCodeForPush(document, target.codeKind);
         const payload = buildExperimentPatch(
           completeExperiment,
           target,
@@ -320,102 +322,81 @@ function getCodeKind(document: vscode.TextDocument): CodeKind | undefined {
 }
 
 async function buildCodeForPush(
-  context: vscode.ExtensionContext,
   document: vscode.TextDocument,
   codeKind: CodeKind,
 ): Promise<string> {
   const sourceExtension = path.extname(document.fileName).toLowerCase();
-  const sourceBaseName = path.basename(document.fileName, sourceExtension);
-  const outputExtension = codeKind === "javascript" ? ".js" : ".css";
-  const outputFileName = `${safeWebpackFileName(sourceBaseName)}${outputExtension}`;
-  const outputDirectory = await fs.mkdtemp(
-    path.join(os.tmpdir(), WEBPACK_TEMP_DIR_PREFIX),
-  );
+
+  // Plain CSS is pushed verbatim, matching the previous pass-through behavior.
+  if (codeKind === "css" && sourceExtension !== ".scss") {
+    return document.getText();
+  }
+
+  // sass and esbuild both resolve imports relative to a real file on disk, so
+  // unsaved edits are written to a sibling temp file used as the entry point.
   let entryPath = document.fileName;
   let temporaryEntryPath: string | undefined;
 
   try {
     if (document.isDirty) {
+      const sourceBaseName = safeFileName(
+        path.basename(document.fileName, sourceExtension),
+      );
       temporaryEntryPath = path.join(
         path.dirname(document.fileName),
-        `.optimizely-tools-${Date.now()}-${safeWebpackFileName(sourceBaseName)}${sourceExtension}`,
+        `.optimizely-tools-${Date.now()}-${sourceBaseName}${sourceExtension}`,
       );
       entryPath = temporaryEntryPath;
       await fs.writeFile(temporaryEntryPath, document.getText(), "utf8");
     }
 
-    const webpackEntry = getWebpackEntry(context.extensionPath);
-    const webpackConfig = path.join(context.extensionPath, "webpack.config.js");
-    const args = [
-      "--config",
-      webpackConfig,
-      "--env",
-      `entry=${entryPath}`,
-      "--env",
-      `destination=${outputDirectory}`,
-      "--env",
-      `filename=${outputFileName}`,
-    ];
-
-    await execFile(process.execPath, [webpackEntry, ...args], {
-      cwd: context.extensionPath,
-      env: {
-        ...process.env,
-        // Run VS Code's bundled Electron binary as a plain Node process so we
-        // can invoke webpack's JS entry directly. We can't rely on
-        // node_modules/.bin/webpack because vsce strips those symlinks when
-        // packaging the extension.
-        ELECTRON_RUN_AS_NODE: "1",
-        NODE_ENV: "production",
-      },
-      maxBuffer: WEBPACK_OUTPUT_BUFFER_BYTES,
-    });
-
-    const outputPath = path.join(outputDirectory, outputFileName);
-    return await fs.readFile(outputPath, "utf8");
+    return codeKind === "javascript"
+      ? await buildJavaScript(entryPath)
+      : compileScss(entryPath);
   } catch (error) {
-    throw new Error(`Webpack build failed. ${formatProcessError(error)}`);
+    throw new Error(`Build failed. ${formatError(error)}`);
   } finally {
     if (temporaryEntryPath) {
       await fs.rm(temporaryEntryPath, { force: true });
     }
-    await fs.rm(outputDirectory, { force: true, recursive: true });
   }
 }
 
-function getWebpackEntry(extensionPath: string): string {
-  return path.join(
-    extensionPath,
-    "node_modules",
-    "webpack",
-    "bin",
-    "webpack.js",
-  );
+async function buildJavaScript(entryPath: string): Promise<string> {
+  await ensureEsbuild();
+  const result = await esbuild.build({
+    entryPoints: [entryPath],
+    bundle: true,
+    write: false,
+    format: "iife",
+    target: ["es2015"],
+    platform: "browser",
+    // Minify whitespace and syntax but keep identifier names readable, matching
+    // the previous Terser config (mangle disabled).
+    minifyWhitespace: true,
+    minifySyntax: true,
+    minifyIdentifiers: false,
+    legalComments: "none",
+    drop: ["debugger"],
+    logLevel: "silent",
+  });
+
+  const output = result.outputFiles?.[0]?.text;
+  if (output === undefined) {
+    throw new Error("esbuild produced no output.");
+  }
+  return output;
 }
 
-function safeWebpackFileName(fileName: string): string {
+function compileScss(entryPath: string): string {
+  return sass.compile(entryPath, { style: "expanded" }).css;
+}
+
+function safeFileName(fileName: string): string {
   return (
     fileName.replace(/[^a-z0-9._-]/gi, "-").replace(/^-+|-+$/g, "") ||
     "optimizely-code"
   );
-}
-
-function formatProcessError(error: unknown): string {
-  if (isExecError(error)) {
-    const details = [error.stderr, error.stdout, error.message]
-      .filter((value): value is string => Boolean(value?.trim()))
-      .join("\n")
-      .trim();
-    return details || "No webpack output was captured.";
-  }
-
-  return formatError(error);
-}
-
-function isExecError(
-  error: unknown,
-): error is Error & { stdout?: string; stderr?: string } {
-  return error instanceof Error;
 }
 
 async function ensureToken(context: vscode.ExtensionContext): Promise<boolean> {
@@ -621,18 +602,34 @@ async function confirmPush(
   document: vscode.TextDocument,
 ): Promise<boolean> {
   const answer = await vscode.window.showWarningMessage(
-    [
-      "Push this file to Optimizely?",
-      `Project: ${project.name} (${project.id})`,
-      `Experiment: ${experiment.name} (${experiment.id})`,
-      `Target: ${describeTarget(target)}`,
-      `File: ${document.fileName}`,
-    ].join("\n"),
-    { modal: true },
+    "Push this file to Optimizely?",
+    {
+      modal: true,
+      detail: [
+        `Project: ${project.id}`,
+        `Experiment: ${experiment.name} (${experiment.id})`,
+        `Target: ${describeConfirmTarget(target)}`,
+        `File: ${document.fileName}`,
+      ].join("\n\n"),
+    },
     "Push",
   );
 
   return answer === "Push";
+}
+
+function describeConfirmTarget(target: PushTarget): string {
+  const codeLabel = target.codeKind === "javascript" ? "JS" : "CSS";
+
+  if (target.kind === "shared") {
+    return `shared - ${codeLabel}`;
+  }
+
+  const variationName =
+    target.variation?.name ||
+    target.variation?.key ||
+    target.variation?.variation_id;
+  return `Variation "${variationName}" - ${codeLabel}`;
 }
 
 function buildExperimentPatch(

@@ -7,6 +7,8 @@ tsconfig.json
 .eslintrc.json
 .prettierrc
 
-# webpack.config.js is in vsce's default-ignore list, but this extension loads
-# it at runtime to build user code, so force it back into the package.
-!webpack.config.js
+# Source maps and the prior packaged builds are not needed in the package.
+dist/**/*.map
+**/*.vsix
+.DS_Store
+**/.DS_Store

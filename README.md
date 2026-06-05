@@ -7,8 +7,8 @@ Build and push JavaScript, SCSS, and CSS files from VS Code directly to Optimize
 ## Features
 
 - Push `.js`, `.scss`, and `.css` files from the editor title bar, editor context menu, explorer context menu, or command palette.
-- Build JavaScript through webpack before pushing, with browser ES2015 output.
-- Compile SCSS through webpack and push the generated CSS.
+- Bundle and minify JavaScript with esbuild before pushing, targeting browser ES2015.
+- Compile SCSS to CSS with Dart Sass and push the generated CSS.
 - Push shared experiment JS/CSS or variation JS/CSS.
 - Store your Optimizely API token securely in VS Code Secret Storage.
 - Confirm the project, experiment, target, and source file before every push.
@@ -113,8 +113,9 @@ npx vsce package    # build a local .vsix to test
 npx vsce publish    # publish to the Marketplace (requires a publisher PAT)
 ```
 
-> The extension runs webpack at runtime, so its dependencies must ship inside the
-> VSIX. Do **not** package with `--no-dependencies`.
+> The extension compiles user code at runtime with `esbuild-wasm` and `sass`, so
+> those dependencies must ship inside the VSIX. Do **not** package with
+> `--no-dependencies`.
 
 ## License
 
