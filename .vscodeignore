@@ -6,3 +6,7 @@ out/**
 tsconfig.json
 .eslintrc.json
 .prettierrc
+
+# webpack.config.js is in vsce's default-ignore list, but this extension loads
+# it at runtime to build user code, so force it back into the package.
+!webpack.config.js

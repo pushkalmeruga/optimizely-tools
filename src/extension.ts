@@ -344,7 +344,7 @@ async function buildCodeForPush(
       await fs.writeFile(temporaryEntryPath, document.getText(), "utf8");
     }
 
-    const webpackBin = getWebpackBin(context.extensionPath);
+    const webpackEntry = getWebpackEntry(context.extensionPath);
     const webpackConfig = path.join(context.extensionPath, "webpack.config.js");
     const args = [
       "--config",
@@ -357,10 +357,15 @@ async function buildCodeForPush(
       `filename=${outputFileName}`,
     ];
 
-    await execFile(webpackBin, args, {
+    await execFile(process.execPath, [webpackEntry, ...args], {
       cwd: context.extensionPath,
       env: {
         ...process.env,
+        // Run VS Code's bundled Electron binary as a plain Node process so we
+        // can invoke webpack's JS entry directly. We can't rely on
+        // node_modules/.bin/webpack because vsce strips those symlinks when
+        // packaging the extension.
+        ELECTRON_RUN_AS_NODE: "1",
         NODE_ENV: "production",
       },
       maxBuffer: WEBPACK_OUTPUT_BUFFER_BYTES,
@@ -378,9 +383,14 @@ async function buildCodeForPush(
   }
 }
 
-function getWebpackBin(extensionPath: string): string {
-  const executable = process.platform === "win32" ? "webpack.cmd" : "webpack";
-  return path.join(extensionPath, "node_modules", ".bin", executable);
+function getWebpackEntry(extensionPath: string): string {
+  return path.join(
+    extensionPath,
+    "node_modules",
+    "webpack",
+    "bin",
+    "webpack.js",
+  );
 }
 
 function safeWebpackFileName(fileName: string): string {

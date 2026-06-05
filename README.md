@@ -1,23 +1,36 @@
 # Optimizely Tools
 
-Build and push JavaScript, SCSS, and CSS files from VS Code to Optimizely Web Experimentation.
+Build and push JavaScript, SCSS, and CSS files from VS Code directly to Optimizely Web Experimentation.
+
+> **Unofficial extension.** This is a community project and is **not affiliated with, endorsed by, or sponsored by Optimizely, Inc.** "Optimizely" is a trademark of its respective owner.
 
 ## Features
 
-- Push `.js`, `.scss`, and `.css` files from the editor title, editor context menu, explorer context menu, or command palette.
+- Push `.js`, `.scss`, and `.css` files from the editor title bar, editor context menu, explorer context menu, or command palette.
 - Build JavaScript through webpack before pushing, with browser ES2015 output.
 - Compile SCSS through webpack and push the generated CSS.
 - Push shared experiment JS/CSS or variation JS/CSS.
-- Store the Optimizely token in VS Code Secret Storage.
+- Store your Optimizely API token securely in VS Code Secret Storage.
 - Confirm the project, experiment, target, and source file before every push.
 
-## Setup
+## Installation
 
-1. Run `npm install`.
-2. Run `npm run package`.
-3. Press `F5` in VS Code to open an Extension Development Host.
-4. Run `Optimizely: Save API Token` from the command palette.
-5. Open a `.js`, `.scss`, or `.css` file and run `Push to Optimizely`.
+Install **Optimizely Tools** from the VS Code Marketplace:
+
+- In VS Code: open the Extensions view (`Cmd`/`Ctrl`+`Shift`+`X`), search for **Optimizely Tools**, and click **Install**.
+- Or from the command line:
+
+  ```bash
+  code --install-extension pushkalmeruga.optimizely-tools
+  ```
+
+## Getting Started
+
+1. Run **`Optimizely: Save API Token`** from the command palette (`Cmd`/`Ctrl`+`Shift`+`P`) and paste your Optimizely Web Experimentation API token.
+2. Open a `.js`, `.scss`, or `.css` file and add the Optimizely IDs in the first 15 lines (see [File Metadata](#file-metadata)).
+3. Run **`Push to Optimizely`** from the editor title bar, right-click menu, or command palette.
+
+To remove a stored token later, run **`Optimizely: Remove API Token`**.
 
 ## File Metadata
 
@@ -63,13 +76,6 @@ Code changes:
 - `optimizelyTools.publishOnPush`: adds `action=publish` to the update request.
 - `optimizelyTools.overrideDrafts`: adds `override_changes=true` to the update request.
 
-## Development Commands
-
-- `npm run package`: bundle the extension into `dist/extension.js`.
-- `npm run watch`: rebuild on source changes.
-- `npm run lint`: lint TypeScript source.
-- `npx tsc --noEmit`: type-check the extension.
-
 ## API Endpoints
 
 The extension uses Optimizely Web Experimentation REST API v2:
@@ -78,11 +84,38 @@ The extension uses Optimizely Web Experimentation REST API v2:
 - `GET /v2/pages/{page_id}`
 - `PATCH /v2/experiments/{experiment_id}`
 
-## Publishing Prep
+---
 
-Before publishing to the VS Code Marketplace:
+## Development
 
-- Replace the local `publisher` value in `package.json`.
-- Add marketplace metadata such as repository, license, keywords, and icon if needed.
-- Run `npm run package`, `npm run lint`, and `npx tsc --noEmit`.
-- Package with `vsce package` and test the generated `.vsix` in a clean VS Code profile.
+These steps are for contributors working on the extension itself. End users do **not** need them — installing from the Marketplace is enough.
+
+### Run from source
+
+1. Run `npm install`.
+2. Run `npm run package`.
+3. Press `F5` in VS Code to open an Extension Development Host.
+4. In that window, run `Optimizely: Save API Token`, then open a file and run `Push to Optimizely`.
+
+### Commands
+
+- `npm run compile`: bundle the extension into `dist/extension.js`.
+- `npm run watch`: rebuild on source changes.
+- `npm run lint`: lint the TypeScript source.
+- `npx tsc --noEmit`: type-check the extension.
+
+### Packaging & publishing
+
+Packaging requires Node 20+ (`vsce` does not support older versions).
+
+```bash
+npx vsce package    # build a local .vsix to test
+npx vsce publish    # publish to the Marketplace (requires a publisher PAT)
+```
+
+> The extension runs webpack at runtime, so its dependencies must ship inside the
+> VSIX. Do **not** package with `--no-dependencies`.
+
+## License
+
+[MIT](LICENSE)

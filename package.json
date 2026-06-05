@@ -2,14 +2,14 @@
   "name": "optimizely-tools",
   "displayName": "Optimizely Tools",
   "description": "Build and push JavaScript, SCSS, and CSS files from VS Code to Optimizely Web Experimentation.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "MIT",
   "publisher": "pushkalmeruga",
   "repository": {
     "type": "git",
     "url": "https://github.com/pushkalmeruga/optimizely-tools.git"
   },
-  "icon": "images/optimizely.png",
+  "icon": "images/icon.png",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -28,8 +28,8 @@
         "command": "optimizelyTools.pushCurrentFile",
         "title": "Push to Optimizely",
         "icon": {
-          "light": "images/optimizely.png",
-          "dark": "images/optimizely.png"
+          "light": "images/icon.png",
+          "dark": "images/icon.png"
         }
       },
       {
