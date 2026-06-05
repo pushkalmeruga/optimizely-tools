@@ -1,6 +1,6 @@
 # Optimizely Tools
 
-Optimizely Tools is an unofficial VS Code extension that lets you push experiment code to Optimizely Web Experimentation without leaving your editor. Annotate any .js, .scss, or .css file with Optimizely project/experiment/variation IDs in the first few lines, then push from the title bar, context menu, or command palette. JavaScript is bundled and minified with esbuild (targeting browser ES2015), SCSS is compiled to CSS with Dart Sass, and your API token is stored securely in VS Code Secret Storage. Supports both shared experiment code and per-variation code, with automatic page-ID resolution and a confirmation step before every push.
+Optimizely Tools is an unofficial VS Code extension that lets you push experiment code to Optimizely Web Experimentation without leaving your editor. Annotate any `.js`, `.scss`, or `.css` file with Optimizely project/experiment/variation IDs in the first few lines, then push from the title bar, context menu, or command palette. JavaScript is bundled and minified with esbuild (targeting browser ES2015), SCSS is compiled to CSS with Dart Sass, and your API token is stored securely in VS Code Secret Storage. Supports both shared experiment code and per-variation code, with automatic page-ID resolution and a confirmation step before every push.
 
 Not affiliated with, endorsed by, or sponsored by Optimizely, Inc.
 
