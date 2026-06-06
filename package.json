@@ -2,7 +2,7 @@
   "name": "optimizely-tools",
   "displayName": "Optimizely Tools",
   "description": "Build and push JavaScript, SCSS, and CSS files from VS Code to Optimizely Web Experimentation.",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "license": "MIT",
   "publisher": "pushkalmeruga",
   "repository": {

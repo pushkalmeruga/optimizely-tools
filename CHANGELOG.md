@@ -4,15 +4,33 @@ All notable changes to the "Optimizely Tools" extension are documented in this f
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [0.1.4] - 2026-06-06
+## [0.1.5] - 2026-06-06
 
 ### Fixed
 
-- Disabled esbuild tree-shaking when bundling JavaScript. Optimizely custom code
-  routinely defines functions and variables that are invoked externally (by the
-  page or editor) and never referenced within the file, so tree-shaking would
-  silently delete them and push an incomplete bundle. All top-level code is now
-  preserved.
+- Re-enabled esbuild tree-shaking (reverting the 0.1.4 change). Disabling it
+  caused every export of an imported module to be bundled into the output, so a
+  file importing from a shared utility library pulled in all of its unused
+  helpers (cookie helpers, DOM waiters, etc.). With tree-shaking on, only the
+  imported symbols actually used are included, while the entry file's own
+  top-level code is preserved because it is reachable from the bootstrap
+  side effects.
+
+### Changed
+
+- JavaScript is now pushed as readable, indented output instead of minified
+  code, so it can be debugged directly in browser dev tools. Imports are still
+  bundled and unused imports tree-shaken; only the whitespace/syntax
+  minification was removed.
+
+## [0.1.4] - 2026-06-06
+
+### Changed
+
+- Disabled esbuild tree-shaking when bundling JavaScript. This was intended to
+  stop unused-looking declarations from being dropped, but it regressed bundling:
+  unused exports from imported modules were no longer eliminated. Reverted in
+  0.1.5.
 
 ## [0.1.3] - 2026-06-05
 

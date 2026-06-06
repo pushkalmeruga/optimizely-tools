@@ -371,26 +371,41 @@ async function buildJavaScript(entryPath: string): Promise<string> {
     format: "iife",
     target: ["es2015"],
     platform: "browser",
-    // Minify whitespace and syntax but keep identifier names readable, matching
-    // the previous Terser config (mangle disabled).
-    minifyWhitespace: true,
-    minifySyntax: true,
-    minifyIdentifiers: false,
-    // Optimizely custom code routinely defines functions/vars that are invoked
-    // externally (by the page or editor), so they are never referenced inside
-    // the file. Tree-shaking would delete them and push a gutted bundle, so it
-    // must stay off.
-    treeShaking: false,
+    // Emit readable, indented output (no minification) so the code pushed to
+    // Optimizely can be debugged directly in browser dev tools. Tree-shaking
+    // still removes unused imports from bundled modules.
     legalComments: "none",
     drop: ["debugger"],
     logLevel: "silent",
+    // metafile lists the bundled input paths, which we use to strip esbuild's
+    // module-boundary comments (e.g. "// ../utils/foo.js") so local file paths
+    // are not leaked into the pushed code.
+    metafile: true,
   });
 
   const output = result.outputFiles?.[0]?.text;
   if (output === undefined) {
     throw new Error("esbuild produced no output.");
   }
-  return output;
+  return stripModulePathComments(output, result.metafile);
+}
+
+// In non-minified bundle output esbuild prefixes each module with a comment of
+// the form `// <input path>`. Those paths are local to the author's machine, so
+// remove exactly the comment lines whose text matches a bundled input path. Only
+// these exact matches are removed, so genuine code comments are left untouched.
+function stripModulePathComments(
+  output: string,
+  metafile: { inputs: Record<string, unknown> },
+): string {
+  const markers = new Set(
+    Object.keys(metafile.inputs).map((inputPath) => `// ${inputPath}`),
+  );
+  return output
+    .split("\n")
+    .filter((line) => !markers.has(line.trim()))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n");
 }
 
 function compileScss(entryPath: string): string {
