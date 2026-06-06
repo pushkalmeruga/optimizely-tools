@@ -376,6 +376,11 @@ async function buildJavaScript(entryPath: string): Promise<string> {
     minifyWhitespace: true,
     minifySyntax: true,
     minifyIdentifiers: false,
+    // Optimizely custom code routinely defines functions/vars that are invoked
+    // externally (by the page or editor), so they are never referenced inside
+    // the file. Tree-shaking would delete them and push a gutted bundle, so it
+    // must stay off.
+    treeShaking: false,
     legalComments: "none",
     drop: ["debugger"],
     logLevel: "silent",

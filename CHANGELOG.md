@@ -4,6 +4,16 @@ All notable changes to the "Optimizely Tools" extension are documented in this f
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.1.4] - 2026-06-06
+
+### Fixed
+
+- Disabled esbuild tree-shaking when bundling JavaScript. Optimizely custom code
+  routinely defines functions and variables that are invoked externally (by the
+  page or editor) and never referenced within the file, so tree-shaking would
+  silently delete them and push an incomplete bundle. All top-level code is now
+  preserved.
+
 ## [0.1.3] - 2026-06-05
 
 ### Changed
