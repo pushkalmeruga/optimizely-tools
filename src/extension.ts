@@ -11,6 +11,7 @@ interface OptimizelyFileIds {
   projectId?: number;
   experimentId?: number;
   variationId?: number;
+  variationName?: string;
 }
 
 const TOKEN_KEY = "optimizelyTools.apiToken";
@@ -80,6 +81,13 @@ interface PushTarget {
   kind: TargetKind;
   codeKind: CodeKind;
   variation?: OptimizelyVariation;
+}
+
+interface SelectedPage {
+  id: number;
+  // Populated only when the page was chosen from the picker (multiple pages);
+  // a single auto-selected page has no fetched name.
+  name?: string;
 }
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -156,7 +164,7 @@ async function pushCurrentFile(
   const fileIds = parseIdsFromFile(document);
   const config = vscode.workspace.getConfiguration("optimizelyTools");
   const projectId = fileIds.projectId ?? config.get<number>("defaultProjectId");
-  const { experimentId, variationId } = fileIds;
+  const { experimentId, variationId, variationName } = fileIds;
 
   if (document.isDirty) {
     const choice = await vscode.window.showWarningMessage(
@@ -216,19 +224,23 @@ async function pushCurrentFile(
           completeExperiment,
           codeKind,
           variationId,
+          variationName,
         );
         if (!target) {
           return;
         }
 
         let pageId: number | undefined;
+        let pageName: string | undefined;
 
         if (target.kind === "variation") {
           progress.report({ message: "Resolving page..." });
-          pageId = await pickPage(client, token, completeExperiment);
-          if (!pageId) {
+          const selectedPage = await pickPage(client, token, completeExperiment);
+          if (!selectedPage) {
             return; // User cancelled or no pages found
           }
+          pageId = selectedPage.id;
+          pageName = selectedPage.name;
         }
 
         const pseudoProject: OptimizelyProject = {
@@ -240,6 +252,7 @@ async function pushCurrentFile(
           completeExperiment,
           target,
           document,
+          pageName,
         );
         if (!confirmed) {
           return;
@@ -284,6 +297,13 @@ function parseIdsFromFile(document: vscode.TextDocument): OptimizelyFileIds {
   const variationIdMatch = text.match(/Variation Id:\s*(\d+)/i);
   if (variationIdMatch?.[1]) {
     ids.variationId = parseInt(variationIdMatch[1], 10);
+  }
+
+  // "Variation: <name>" (e.g. "Variation: Shared"). The colon immediately after
+  // "Variation" means this never matches the "Variation Id:" line above.
+  const variationNameMatch = text.match(/Variation:[ \t]*([^\n\r]+)/i);
+  if (variationNameMatch?.[1]) {
+    ids.variationName = variationNameMatch[1].trim();
   }
 
   return ids;
@@ -441,7 +461,7 @@ async function pickPage(
   client: OptimizelyClient,
   token: string,
   experiment: OptimizelyExperiment,
-): Promise<number | undefined> {
+): Promise<SelectedPage | undefined> {
   const rootPageIds = uniqueNumbers(experiment.page_ids ?? []);
   if (rootPageIds.length > 0) {
     return pickPageFromIds(client, token, rootPageIds, rootPageIds.length > 1);
@@ -463,9 +483,9 @@ async function pickPageFromIds(
   token: string,
   pageIds: number[],
   forcePick: boolean,
-): Promise<number | undefined> {
+): Promise<SelectedPage | undefined> {
   if (!forcePick && pageIds.length === 1) {
-    return pageIds[0];
+    return { id: pageIds[0] };
   }
 
   const pages = await Promise.all(
@@ -477,6 +497,7 @@ async function pickPageFromIds(
       label: page.name,
       description: `(ID: ${page.id})`,
       pageId: page.id,
+      pageName: page.name,
     })),
     {
       title: "Select Page for Code Change",
@@ -485,7 +506,11 @@ async function pickPageFromIds(
     },
   );
 
-  return pagePick?.pageId;
+  if (!pagePick) {
+    return undefined;
+  }
+
+  return { id: pagePick.pageId, name: pagePick.pageName };
 }
 
 function getExperimentPageIds(experiment: OptimizelyExperiment): number[] {
@@ -539,7 +564,38 @@ async function pickTarget(
   experiment: OptimizelyExperiment,
   codeKind: CodeKind,
   variationIdFromFile?: number,
+  variationNameFromFile?: string,
 ): Promise<PushTarget | undefined> {
+  const variations = experiment.variations ?? [];
+
+  // When the file specifies a variation ID, push to that variation directly
+  // without asking the user where to push or which variation. The page is still
+  // resolved later, which only prompts when multiple pages are present.
+  if (variationIdFromFile) {
+    const variation = variations.find(
+      (v) => v.variation_id === variationIdFromFile,
+    );
+    if (variation) {
+      return {
+        kind: "variation",
+        codeKind: codeKind,
+        variation,
+      };
+    }
+    vscode.window.showWarningMessage(
+      `Variation ID ${variationIdFromFile} from file is not valid for experiment "${experiment.name}". Please select where to push.`,
+    );
+    // Fall through to manual selection below.
+  } else if (variationNameFromFile?.trim().toLowerCase() === "shared") {
+    // No variation ID, but the file declares "Variation: Shared": push to the
+    // experiment's shared code without prompting.
+    return {
+      kind: "shared",
+      codeKind: codeKind,
+    };
+  }
+
+  // No (valid) variation ID in the file: ask where the code should go.
   const targetPick = await vscode.window.showQuickPick(
     [
       {
@@ -570,48 +626,33 @@ async function pickTarget(
   }
 
   // Allow all variations, including "Original", to be selected.
-  const variations = experiment.variations ?? [];
   if (variations.length === 0) {
     vscode.window.showWarningMessage("This experiment has no variations.");
     return undefined;
   }
 
-  let variation: OptimizelyVariation | undefined;
-
-  if (variationIdFromFile) {
-    variation = variations.find((v) => v.variation_id === variationIdFromFile);
-    if (!variation) {
-      vscode.window.showWarningMessage(
-        `Variation ID ${variationIdFromFile} from file is not valid for experiment "${experiment.name}". Please select a variation.`,
-      );
-    }
-  }
-
-  if (!variation) {
-    const variationPick = await vscode.window.showQuickPick<
-      vscode.QuickPickItem & { variation: OptimizelyVariation }
-    >(
-      variations.map((v) => ({
-        label: v.name || v.key || `Variation ${v.variation_id}`,
-        description: String(v.variation_id),
-        detail: v.key ? `(key: ${v.key})` : undefined,
-        variation: v,
-      })),
-      {
-        title: "Select Optimizely Variation",
-        placeHolder: "Variation to update",
-        matchOnDescription: true,
-        matchOnDetail: true,
-      },
-    );
-    if (!variationPick) return undefined;
-    variation = variationPick.variation;
-  }
+  const variationPick = await vscode.window.showQuickPick<
+    vscode.QuickPickItem & { variation: OptimizelyVariation }
+  >(
+    variations.map((v) => ({
+      label: v.name || v.key || `Variation ${v.variation_id}`,
+      description: String(v.variation_id),
+      detail: v.key ? `(key: ${v.key})` : undefined,
+      variation: v,
+    })),
+    {
+      title: "Select Optimizely Variation",
+      placeHolder: "Variation to update",
+      matchOnDescription: true,
+      matchOnDetail: true,
+    },
+  );
+  if (!variationPick) return undefined;
 
   return {
     kind: "variation",
     codeKind: codeKind,
-    variation,
+    variation: variationPick.variation,
   };
 }
 
@@ -620,17 +661,23 @@ async function confirmPush(
   experiment: OptimizelyExperiment,
   target: PushTarget,
   document: vscode.TextDocument,
+  pageName?: string,
 ): Promise<boolean> {
+  const detailLines = [
+    `Project: ${project.id}`,
+    `Experiment: ${experiment.name} (${experiment.id})`,
+    `Target: ${describeConfirmTarget(target)}`,
+  ];
+  if (pageName) {
+    detailLines.push(`Page: ${pageName}`);
+  }
+  detailLines.push(`File: ${document.fileName}`);
+
   const answer = await vscode.window.showWarningMessage(
     "Push this file to Optimizely?",
     {
       modal: true,
-      detail: [
-        `Project: ${project.id}`,
-        `Experiment: ${experiment.name} (${experiment.id})`,
-        `Target: ${describeConfirmTarget(target)}`,
-        `File: ${document.fileName}`,
-      ].join("\n\n"),
+      detail: detailLines.join("\n\n"),
     },
     "Push",
   );

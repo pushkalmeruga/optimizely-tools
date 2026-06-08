@@ -4,6 +4,15 @@ All notable changes to the "Optimizely Tools" extension are documented in this f
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.1.7] - 2026-06-08
+
+### Changed
+
+- When a file has no Variation ID but declares `Variation: Shared` (case
+  insensitive) in its comments, the code is now pushed to the experiment's
+  shared code without prompting for a target. Any other variation name (or no
+  variation comment) still shows the target/variation prompts.
+
 ## [0.1.5] - 2026-06-06
 
 ### Fixed
@@ -22,6 +31,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   code, so it can be debugged directly in browser dev tools. Imports are still
   bundled and unused imports tree-shaken; only the whitespace/syntax
   minification was removed.
+- When a file specifies a Variation ID, the push now goes straight to that
+  variation without prompting for the target or variation. The page is still
+  asked for only when the experiment has multiple pages. If no Variation ID is
+  present (or it is invalid for the experiment), the target/variation prompts
+  are shown as before.
+- The confirmation dialog now shows the selected page name when a page was
+  chosen from the multi-page picker.
 
 ## [0.1.4] - 2026-06-06
 
