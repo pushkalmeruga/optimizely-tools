@@ -2,7 +2,7 @@
   "name": "optimizely-tools",
   "displayName": "Optimizely Tools",
   "description": "Build and push JavaScript, SCSS, and CSS files from VS Code to Optimizely Web Experimentation.",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "license": "MIT",
   "publisher": "pushkalmeruga",
   "repository": {
@@ -96,6 +96,19 @@
           "type": "boolean",
           "default": false,
           "description": "Add override_changes=true to update requests when Optimizely reports a draft conflict."
+        },
+        "optimizelyTools.validateBeforePush": {
+          "type": "boolean",
+          "default": true,
+          "description": "Statically check compiled JavaScript for likely-undefined references (typos or missing imports) and warn before pushing."
+        },
+        "optimizelyTools.knownGlobals": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Extra global identifiers provided by the page at runtime that pre-push validation should not flag as undefined (e.g. helper functions injected elsewhere)."
         }
       }
     }
@@ -113,7 +126,9 @@
     "@typescript-eslint/eslint-plugin": "^7.13.0",
     "@typescript-eslint/parser": "^7.13.0",
     "@vscode/vsce": "^2.29.0",
+    "acorn": "^8.16.0",
     "esbuild": "^0.21.4",
+    "eslint-scope": "^7.2.2",
     "eslint": "^8.57.0",
     "prettier": "^3.3.2",
     "typescript": "^5.4.5"

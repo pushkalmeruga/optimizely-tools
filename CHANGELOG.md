@@ -4,6 +4,21 @@ All notable changes to the "Optimizely Tools" extension are documented in this f
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.1.8] - 2026-06-08
+
+### Added
+
+- Pre-push validation for JavaScript. Before pushing, the compiled bundle is
+  statically analyzed and any identifier that is referenced but never declared,
+  imported, or recognized as a runtime global (browser/DOM, language built-ins,
+  and common analytics globals) is reported as "possibly undefined" — catching
+  typos and missing imports (e.g. `getUUID`, `safeFn`). The confirmation dialog
+  lists the suspect names and switches its button to "Push Anyway" so broken
+  code is not pushed on a single default click.
+- Setting `optimizelyTools.validateBeforePush` (default `true`) to toggle the
+  check, and `optimizelyTools.knownGlobals` to allowlist extra page-provided
+  globals that should not be flagged.
+
 ## [0.1.7] - 2026-06-08
 
 ### Changed

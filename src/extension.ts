@@ -6,6 +6,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as esbuild from "esbuild-wasm";
 import * as sass from "sass";
+import { validateBundledJavaScript } from "./validation";
 
 interface OptimizelyFileIds {
   projectId?: number;
@@ -243,6 +244,25 @@ async function pushCurrentFile(
           pageName = selectedPage.name;
         }
 
+        // Compile before confirming so the confirmation step can surface any
+        // pre-push validation warnings (e.g. likely-undefined references).
+        progress.report({ message: "Compiling code..." });
+        const compiledCode = await buildCodeForPush(document, target.codeKind);
+
+        let validationWarnings: string[] = [];
+        if (
+          target.codeKind === "javascript" &&
+          config.get<boolean>("validateBeforePush", true)
+        ) {
+          progress.report({ message: "Validating code..." });
+          const extraGlobals = config.get<string[]>("knownGlobals", []);
+          validationWarnings =
+            validateBundledJavaScript(
+              compiledCode,
+              extraGlobals,
+            ).undefinedReferences;
+        }
+
         const pseudoProject: OptimizelyProject = {
           id: projectId,
           name: `Project ${projectId}`,
@@ -253,13 +273,12 @@ async function pushCurrentFile(
           target,
           document,
           pageName,
+          validationWarnings,
         );
         if (!confirmed) {
           return;
         }
 
-        progress.report({ message: "Compiling code..." });
-        const compiledCode = await buildCodeForPush(document, target.codeKind);
         const payload = buildExperimentPatch(
           completeExperiment,
           target,
@@ -662,6 +681,7 @@ async function confirmPush(
   target: PushTarget,
   document: vscode.TextDocument,
   pageName?: string,
+  validationWarnings: string[] = [],
 ): Promise<boolean> {
   const detailLines = [
     `Project: ${project.id}`,
@@ -673,16 +693,28 @@ async function confirmPush(
   }
   detailLines.push(`File: ${document.fileName}`);
 
+  const hasWarnings = validationWarnings.length > 0;
+  if (hasWarnings) {
+    detailLines.push(
+      `⚠ Possibly undefined (typo or missing import?): ${validationWarnings.join(", ")}`,
+    );
+  }
+
+  // When validation flags something, make the user opt in explicitly rather than
+  // pushing potentially broken code with a single default-looking click.
+  const confirmLabel = hasWarnings ? "Push Anyway" : "Push";
   const answer = await vscode.window.showWarningMessage(
-    "Push this file to Optimizely?",
+    hasWarnings
+      ? "This file has possible issues. Push to Optimizely anyway?"
+      : "Push this file to Optimizely?",
     {
       modal: true,
       detail: detailLines.join("\n\n"),
     },
-    "Push",
+    confirmLabel,
   );
 
-  return answer === "Push";
+  return answer === confirmLabel;
 }
 
 function describeConfirmTarget(target: PushTarget): string {
