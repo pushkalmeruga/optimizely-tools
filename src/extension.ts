@@ -6,7 +6,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as esbuild from "esbuild-wasm";
 import * as sass from "sass";
-import { validateBundledJavaScript } from "./validation";
+import { findUndefinedReferences, UndefinedReference } from "./validation";
 
 interface OptimizelyFileIds {
   projectId?: number;
@@ -94,6 +94,26 @@ interface SelectedPage {
 export function activate(context: vscode.ExtensionContext): void {
   const client = new OptimizelyClient(context);
 
+  const diagnostics =
+    vscode.languages.createDiagnosticCollection("optimizelyTools");
+  context.subscriptions.push(diagnostics);
+
+  const refresh = (document: vscode.TextDocument): void =>
+    refreshJsDiagnostics(document, diagnostics);
+  vscode.workspace.textDocuments.forEach(refresh);
+  context.subscriptions.push(
+    vscode.workspace.onDidOpenTextDocument(refresh),
+    vscode.workspace.onDidSaveTextDocument(refresh),
+    vscode.workspace.onDidCloseTextDocument((document) =>
+      diagnostics.delete(document.uri),
+    ),
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration("optimizelyTools")) {
+        vscode.workspace.textDocuments.forEach(refresh);
+      }
+    }),
+  );
+
   context.subscriptions.push(
     vscode.commands.registerCommand("optimizelyTools.signIn", () =>
       saveToken(context),
@@ -103,9 +123,77 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
     vscode.commands.registerCommand(
       "optimizelyTools.pushCurrentFile",
-      (uri?: vscode.Uri) => pushCurrentFile(context, client, uri),
+      (uri?: vscode.Uri) => pushCurrentFile(context, client, diagnostics, uri),
     ),
   );
+}
+
+// Re-runs undefined-reference validation for a JavaScript document and updates
+// its red error diagnostics (squiggles + Problems panel). Diagnostics are only
+// shown for Optimizely-targeted files (those declaring an Experiment Id in their
+// metadata) so unrelated workspace scripts are never flagged. Non-JS documents,
+// non-Optimizely files, and the case where validation is disabled simply clear
+// any existing diagnostics.
+function refreshJsDiagnostics(
+  document: vscode.TextDocument,
+  collection: vscode.DiagnosticCollection,
+): void {
+  const config = vscode.workspace.getConfiguration("optimizelyTools");
+  if (
+    getCodeKind(document) !== "javascript" ||
+    !config.get<boolean>("validateBeforePush", true) ||
+    parseIdsFromFile(document).experimentId === undefined
+  ) {
+    collection.delete(document.uri);
+    return;
+  }
+
+  const extraGlobals = config.get<string[]>("knownGlobals", []);
+  const references = findUndefinedReferences(document.getText(), extraGlobals);
+  collection.set(document.uri, buildUndefinedDiagnostics(document, references));
+}
+
+// Collapses the per-occurrence references into one human-readable entry per
+// identifier, annotated with the 1-based line numbers where it appears (e.g.
+// "getUUID (line 12)" or "safeFn (lines 9, 14)"), for the push confirmation.
+function summarizeUndefinedReferences(
+  document: vscode.TextDocument,
+  references: UndefinedReference[],
+): string[] {
+  const linesByName = new Map<string, Set<number>>();
+  for (const reference of references) {
+    const line = document.positionAt(reference.start).line + 1;
+    const lines = linesByName.get(reference.name) ?? new Set<number>();
+    lines.add(line);
+    linesByName.set(reference.name, lines);
+  }
+
+  return [...linesByName.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, lines]) => {
+      const sorted = [...lines].sort((a, b) => a - b);
+      const label = sorted.length > 1 ? "lines" : "line";
+      return `${name} (${label} ${sorted.join(", ")})`;
+    });
+}
+
+function buildUndefinedDiagnostics(
+  document: vscode.TextDocument,
+  references: UndefinedReference[],
+): vscode.Diagnostic[] {
+  return references.map((reference) => {
+    const range = new vscode.Range(
+      document.positionAt(reference.start),
+      document.positionAt(reference.end),
+    );
+    const diagnostic = new vscode.Diagnostic(
+      range,
+      `'${reference.name}' is not defined — likely a typo or missing import. If the page provides it at runtime, add it to the optimizelyTools.knownGlobals setting.`,
+      vscode.DiagnosticSeverity.Error,
+    );
+    diagnostic.source = "Optimizely Tools";
+    return diagnostic;
+  });
 }
 
 export function deactivate(): void {
@@ -138,6 +226,7 @@ async function removeToken(context: vscode.ExtensionContext): Promise<void> {
 async function pushCurrentFile(
   context: vscode.ExtensionContext,
   client: OptimizelyClient,
+  diagnostics: vscode.DiagnosticCollection,
   uri?: vscode.Uri,
 ): Promise<void> {
   const document = await resolveDocument(uri);
@@ -256,11 +345,19 @@ async function pushCurrentFile(
         ) {
           progress.report({ message: "Validating code..." });
           const extraGlobals = config.get<string[]>("knownGlobals", []);
-          validationWarnings =
-            validateBundledJavaScript(
-              compiledCode,
-              extraGlobals,
-            ).undefinedReferences;
+          const references = findUndefinedReferences(
+            document.getText(),
+            extraGlobals,
+          );
+          // Surface the same findings as red squiggles in the editor.
+          diagnostics.set(
+            document.uri,
+            buildUndefinedDiagnostics(document, references),
+          );
+          validationWarnings = summarizeUndefinedReferences(
+            document,
+            references,
+          );
         }
 
         const pseudoProject: OptimizelyProject = {
@@ -696,23 +793,33 @@ async function confirmPush(
   const hasWarnings = validationWarnings.length > 0;
   if (hasWarnings) {
     detailLines.push(
-      `⚠ Possibly undefined (typo or missing import?): ${validationWarnings.join(", ")}`,
+      `⚠ Possibly undefined (typo or missing import?):\n${validationWarnings
+        .map((warning) => `  • ${warning}`)
+        .join("\n")}`,
     );
   }
 
   // When validation flags something, make the user opt in explicitly rather than
-  // pushing potentially broken code with a single default-looking click.
+  // pushing potentially broken code with a single default-looking click, and use
+  // an error dialog (red icon) instead of a warning dialog. Call the namespace
+  // methods directly (rather than via a stored reference) so each keeps its
+  // `vscode.window` receiver and renders with the correct severity icon.
   const confirmLabel = hasWarnings ? "Push Anyway" : "Push";
-  const answer = await vscode.window.showWarningMessage(
-    hasWarnings
-      ? "This file has possible issues. Push to Optimizely anyway?"
-      : "Push this file to Optimizely?",
-    {
-      modal: true,
-      detail: detailLines.join("\n\n"),
-    },
-    confirmLabel,
-  );
+  const options: vscode.MessageOptions = {
+    modal: true,
+    detail: detailLines.join("\n\n")
+  };
+  const answer = hasWarnings
+    ? await vscode.window.showErrorMessage(
+        "This file has possible issues. Push to Optimizely anyway?",
+        options,
+        confirmLabel,
+      )
+    : await vscode.window.showWarningMessage(
+        "Push this file to Optimizely?",
+        options,
+        confirmLabel,
+      );
 
   return answer === confirmLabel;
 }

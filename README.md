@@ -1,17 +1,18 @@
 # Optimizely Tools
 
-Optimizely Tools is an unofficial VS Code extension that lets you push experiment code to Optimizely Web Experimentation without leaving your editor. Annotate any `.js`, `.scss`, or `.css` file with Optimizely project/experiment/variation IDs in the first few lines, then push from the title bar, context menu, or command palette. JavaScript is bundled and minified with esbuild (targeting browser ES2015), SCSS is compiled to CSS with Dart Sass, and your API token is stored securely in VS Code Secret Storage. Supports both shared experiment code and per-variation code, with automatic page-ID resolution and a confirmation step before every push.
+Optimizely Tools is an unofficial VS Code extension that lets you push experiment code to Optimizely Web Experimentation without leaving your editor. Annotate any `.js`, `.scss`, or `.css` file with Optimizely project/experiment/variation IDs in the first few lines, then push from the title bar, context menu, or command palette. JavaScript is bundled with esbuild as readable output (targeting browser ES2015), SCSS is compiled to CSS with Dart Sass, and your API token is stored securely in VS Code Secret Storage. Supports both shared experiment code and per-variation code, with automatic page-ID resolution and a confirmation step before every push.
 
 Not affiliated with, endorsed by, or sponsored by Optimizely, Inc.
 
 ## Features
 
 - Push `.js`, `.scss`, and `.css` files from the editor title bar, editor context menu, explorer context menu, or command palette.
-- Bundle and minify JavaScript with esbuild before pushing, targeting browser ES2015.
+- Bundle JavaScript with esbuild before pushing (readable output, targeting browser ES2015).
 - Compile SCSS to CSS with Dart Sass and push the generated CSS.
 - Push shared experiment JS/CSS or variation JS/CSS.
 - Store your Optimizely API token securely in VS Code Secret Storage.
 - Confirm the project, experiment, target, and source file before every push.
+- Statically validate JavaScript before pushing: identifiers that are referenced but never declared, imported, or recognized as a runtime global are flagged as red error diagnostics (editor squiggles and Problems-panel rows) and surfaced in the push confirmation, catching typos and missing imports. Diagnostics are shown only for Optimizely-targeted files (those declaring an `Experiment Id`).
 
 ## Installation
 
@@ -75,6 +76,8 @@ Code changes:
 - `optimizelyTools.apiBaseUrl`: Optimizely REST API base URL. Defaults to `https://api.optimizely.com`.
 - `optimizelyTools.publishOnPush`: adds `action=publish` to the update request.
 - `optimizelyTools.overrideDrafts`: adds `override_changes=true` to the update request.
+- `optimizelyTools.validateBeforePush`: statically check compiled JavaScript for likely-undefined references and warn before pushing (default `true`).
+- `optimizelyTools.knownGlobals`: extra global identifiers provided by the page at runtime that validation should not flag as undefined.
 
 ## API Endpoints
 

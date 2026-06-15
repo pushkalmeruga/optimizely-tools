@@ -2,7 +2,7 @@
 // ships no types, and we only need scope analysis to read unresolved references.
 declare module "eslint-scope" {
   interface ScopeReference {
-    identifier: { name: string };
+    identifier: { name: string; start: number; end: number };
   }
   interface Scope {
     through: ScopeReference[];

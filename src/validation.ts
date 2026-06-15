@@ -192,53 +192,66 @@ const KNOWN_GLOBALS: ReadonlySet<string> = new Set([
   "$",
 ]);
 
-export interface JsValidationResult {
-  // Identifiers referenced but never declared, imported, or recognized as a
-  // runtime global — i.e. likely typos or missing imports.
-  undefinedReferences: string[];
+export interface UndefinedReference {
+  // Identifier referenced but never declared, imported, or recognized as a
+  // runtime global — i.e. a likely typo or missing import.
+  name: string;
+  // Character offsets into the analyzed source, suitable for mapping to editor
+  // positions via TextDocument.positionAt.
+  start: number;
+  end: number;
 }
 
-// Statically analyzes the bundled JavaScript that is about to be pushed and
-// returns identifiers that are referenced but never resolved to a declaration,
-// an import (already inlined by bundling), or a known global. Analysis runs on
-// the bundled output so that resolvable imports are not falsely flagged.
-export function validateBundledJavaScript(
+// Statically analyzes JavaScript source and returns every reference that escapes
+// to the global scope without resolving to a declaration, an import, or a known
+// global. Each usage is returned separately (with its source range) so every
+// occurrence can be marked in the editor. Analysis is best-effort: if the code
+// cannot be parsed or analyzed, an empty list is returned rather than throwing,
+// so validation never blocks a push or breaks editing.
+export function findUndefinedReferences(
   code: string,
   extraGlobals: readonly string[] = [],
-): JsValidationResult {
-  let ast: acorn.Node;
-  try {
-    ast = acorn.parse(code, {
-      ecmaVersion: "latest",
-      sourceType: "script",
-      ranges: true,
-    });
-  } catch {
-    // If the bundle does not parse, esbuild would already have failed the build
-    // before this point; treat as "nothing to report" rather than blocking.
-    return { undefinedReferences: [] };
-  }
-
-  let through: { identifier: { name: string } }[];
-  try {
-    const scopeManager = analyze(ast, {
-      ecmaVersion: 2022,
-      sourceType: "script",
-    });
-    through = scopeManager.globalScope.through;
-  } catch {
-    // Never let a scope-analysis edge case block a push.
-    return { undefinedReferences: [] };
+): UndefinedReference[] {
+  const references = analyzeFreeReferences(code);
+  if (!references) {
+    return [];
   }
 
   const allowed = new Set<string>([...KNOWN_GLOBALS, ...extraGlobals]);
-  const undefinedReferences = [
-    ...new Set(
-      through
-        .map((ref) => ref.identifier.name)
-        .filter((referencedName) => !allowed.has(referencedName)),
-    ),
-  ].sort();
+  return references.filter((reference) => !allowed.has(reference.name));
+}
 
-  return { undefinedReferences };
+// Source files generally use ES module syntax (imports), but a hand-written
+// snippet may be a plain script; try module first and fall back to script so
+// either parses.
+function analyzeFreeReferences(
+  code: string,
+): UndefinedReference[] | undefined {
+  for (const sourceType of ["module", "script"] as const) {
+    let ast: acorn.Node;
+    try {
+      ast = acorn.parse(code, {
+        ecmaVersion: "latest",
+        sourceType,
+        ranges: true,
+      });
+    } catch {
+      // Try the other source type before giving up.
+      continue;
+    }
+
+    try {
+      const scopeManager = analyze(ast, { ecmaVersion: 2022, sourceType });
+      return scopeManager.globalScope.through.map((reference) => ({
+        name: reference.identifier.name,
+        start: reference.identifier.start,
+        end: reference.identifier.end,
+      }));
+    } catch {
+      // Parsed but could not be analyzed: do not block on an edge case.
+      return undefined;
+    }
+  }
+
+  return undefined;
 }

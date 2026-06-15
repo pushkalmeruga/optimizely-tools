@@ -4,6 +4,37 @@ All notable changes to the "Optimizely Tools" extension are documented in this f
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.1.10] - 2026-06-15
+
+### Changed
+
+- Each identifier flagged in the push confirmation now lists the line number(s)
+  where it appears (e.g. `getUUID (line 12)`, `safeFn (lines 9, 14)`).
+
+### Fixed
+
+- The validation push confirmation now reliably renders as a red error dialog.
+  The severity method was previously invoked without its `vscode.window`
+  receiver, which could prevent the error styling from being applied.
+
+## [0.1.9] - 2026-06-15
+
+### Added
+
+- Undefined references are now also shown as red error diagnostics (squiggles in
+  the editor and rows in the Problems panel) on the exact identifier, refreshed
+  when a JavaScript file is opened or saved. Diagnostics appear only for
+  Optimizely-targeted files (those declaring an `Experiment Id` in their
+  metadata), so unrelated workspace scripts are never flagged.
+
+### Changed
+
+- Validation now analyzes the source file directly (parsed as an ES module with
+  a plain-script fallback) rather than the bundled output, so findings map to
+  exact editor positions.
+- When validation flags issues, the push confirmation is shown as an error
+  dialog (red icon) instead of a warning dialog.
+
 ## [0.1.8] - 2026-06-08
 
 ### Added
