@@ -364,7 +364,7 @@ async function pushCurrentFile(
           id: projectId,
           name: `Project ${projectId}`,
         };
-        const confirmed = await confirmPush(
+        const { confirmed, publish } = await confirmPush(
           pseudoProject,
           completeExperiment,
           target,
@@ -384,7 +384,12 @@ async function pushCurrentFile(
         );
 
         progress.report({ message: "Pushing code..." });
-        await client.updateExperiment(token, completeExperiment.id, payload);
+        await client.updateExperiment(
+          token,
+          completeExperiment.id,
+          payload,
+          publish,
+        );
         vscode.window.showInformationMessage(
           `Pushed ${target.codeKind.toUpperCase()} to ${describeTarget(target)} in "${completeExperiment.name}".`,
         );
@@ -772,6 +777,11 @@ async function pickTarget(
   };
 }
 
+interface PushConfirmation {
+  confirmed: boolean;
+  publish: boolean;
+}
+
 async function confirmPush(
   project: OptimizelyProject,
   experiment: OptimizelyExperiment,
@@ -779,7 +789,7 @@ async function confirmPush(
   document: vscode.TextDocument,
   pageName?: string,
   validationWarnings: string[] = [],
-): Promise<boolean> {
+): Promise<PushConfirmation> {
   const detailLines = [
     `Project: ${project.id}`,
     `Experiment: ${experiment.name} (${experiment.id})`,
@@ -804,7 +814,10 @@ async function confirmPush(
   // an error dialog (red icon) instead of a warning dialog. Call the namespace
   // methods directly (rather than via a stored reference) so each keeps its
   // `vscode.window` receiver and renders with the correct severity icon.
-  const confirmLabel = hasWarnings ? "Push Anyway" : "Push";
+  const pushLabel = hasWarnings ? "Push Anyway" : "Push";
+  const pushAndPublishLabel = hasWarnings
+    ? "Push Anyway and Publish"
+    : "Push and Publish";
   const options: vscode.MessageOptions = {
     modal: true,
     detail: detailLines.join("\n\n")
@@ -813,15 +826,20 @@ async function confirmPush(
     ? await vscode.window.showErrorMessage(
         "This file has possible issues. Push to Optimizely anyway?",
         options,
-        confirmLabel,
+        pushLabel,
+        pushAndPublishLabel,
       )
     : await vscode.window.showWarningMessage(
         "Push this file to Optimizely?",
         options,
-        confirmLabel,
+        pushLabel,
+        pushAndPublishLabel,
       );
 
-  return answer === confirmLabel;
+  return {
+    confirmed: answer === pushLabel || answer === pushAndPublishLabel,
+    publish: answer === pushAndPublishLabel,
+  };
 }
 
 function describeConfirmTarget(target: PushTarget): string {
@@ -1075,13 +1093,13 @@ class OptimizelyClient {
     token: string,
     experimentId: number,
     payload: Partial<OptimizelyExperiment>,
+    publish: boolean = false,
   ): Promise<OptimizelyExperiment> {
     const config = vscode.workspace.getConfiguration("optimizelyTools");
-    const publishOnPush = config.get<boolean>("publishOnPush", false);
     const overrideDrafts = config.get<boolean>("overrideDrafts", false);
     const params = new URLSearchParams();
 
-    if (publishOnPush) {
+    if (publish) {
       params.set("action", "publish");
     }
     if (overrideDrafts) {

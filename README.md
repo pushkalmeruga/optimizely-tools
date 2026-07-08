@@ -11,7 +11,7 @@ Not affiliated with, endorsed by, or sponsored by Optimizely, Inc.
 - Compile SCSS to CSS with Dart Sass and push the generated CSS.
 - Push shared experiment JS/CSS or variation JS/CSS.
 - Store your Optimizely API token securely in VS Code Secret Storage.
-- Confirm the project, experiment, target, and source file before every push.
+- Confirm the project, experiment, target, and source file before every push, with a choice to push only or push and publish (`action=publish`) each time.
 - Statically validate JavaScript before pushing: identifiers that are referenced but never declared, imported, or recognized as a runtime global are flagged as red error diagnostics (editor squiggles and Problems-panel rows) and surfaced in the push confirmation, catching typos and missing imports. Diagnostics are shown only for Optimizely-targeted files (those declaring an `Experiment Id`).
 
 ## Installation
@@ -74,7 +74,6 @@ Code changes:
 
 - `optimizelyTools.defaultProjectId`: default project ID when the file does not include `Project Id`.
 - `optimizelyTools.apiBaseUrl`: Optimizely REST API base URL. Defaults to `https://api.optimizely.com`.
-- `optimizelyTools.publishOnPush`: adds `action=publish` to the update request.
 - `optimizelyTools.overrideDrafts`: adds `override_changes=true` to the update request.
 - `optimizelyTools.validateBeforePush`: statically check compiled JavaScript for likely-undefined references and warn before pushing (default `true`).
 - `optimizelyTools.knownGlobals`: extra global identifiers provided by the page at runtime that validation should not flag as undefined.

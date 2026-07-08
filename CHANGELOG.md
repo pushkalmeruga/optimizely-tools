@@ -4,6 +4,19 @@ All notable changes to the "Optimizely Tools" extension are documented in this f
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.1.11] - 2026-07-08
+
+### Changed
+
+- Replaced the `optimizelyTools.publishOnPush` setting with a per-push choice.
+  The push confirmation dialog now offers "Push" and "Push & Publish" buttons
+  (or "Push Anyway" / "Push Anyway & Publish" when validation warnings exist),
+  so publishing is decided on each push instead of a fixed global setting.
+
+### Removed
+
+- Setting `optimizelyTools.publishOnPush`.
+
 ## [0.1.10] - 2026-06-15
 
 ### Changed
