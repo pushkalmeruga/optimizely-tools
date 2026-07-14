@@ -103,7 +103,12 @@ export function activate(context: vscode.ExtensionContext): void {
   vscode.workspace.textDocuments.forEach(refresh);
   context.subscriptions.push(
     vscode.workspace.onDidOpenTextDocument(refresh),
-    vscode.workspace.onDidSaveTextDocument(refresh),
+    vscode.workspace.onDidSaveTextDocument((document) => {
+      refresh(document);
+      if (path.basename(document.fileName) === "package.json") {
+        invalidateWorkspacePackageExportsCache();
+      }
+    }),
     vscode.workspace.onDidCloseTextDocument((document) =>
       diagnostics.delete(document.uri),
     ),
@@ -503,6 +508,88 @@ async function buildCodeForPush(
   }
 }
 
+interface WorkspacePackageExports {
+  name: string;
+  root: string;
+  exports: Record<string, string>;
+}
+
+let packageExportsCache: Promise<WorkspacePackageExports[]> | undefined;
+
+// Called when a package.json changes so the next build re-scans instead of
+// reusing exports maps that may now be stale.
+function invalidateWorkspacePackageExportsCache(): void {
+  packageExportsCache = undefined;
+}
+
+// Node's own self-referencing "exports" resolution only works when the
+// importing file lives inside the package's directory tree. Authors here
+// often edit page-injected scripts that live outside any package root, so
+// this scans the whole workspace for package.json "exports" maps and
+// resolves matching bare specifiers regardless of where the entry file sits.
+// Results are cached per workspace scan since this can run once per bare
+// import per build; the cache is invalidated on package.json saves.
+function findWorkspacePackageExports(): Promise<WorkspacePackageExports[]> {
+  if (!packageExportsCache) {
+    packageExportsCache = (async () => {
+      const results: WorkspacePackageExports[] = [];
+      const folders = vscode.workspace.workspaceFolders ?? [];
+      for (const folder of folders) {
+        const packageJsonUris = await vscode.workspace.findFiles(
+          new vscode.RelativePattern(folder, "**/package.json"),
+          "**/node_modules/**",
+        );
+        for (const uri of packageJsonUris) {
+          try {
+            const parsed = JSON.parse(await fs.readFile(uri.fsPath, "utf8"));
+            if (typeof parsed.name !== "string" || typeof parsed.exports !== "object" || parsed.exports === null) {
+              continue;
+            }
+            const root = path.dirname(uri.fsPath);
+            const exportsMap: Record<string, string> = {};
+            for (const [subpath, target] of Object.entries(parsed.exports)) {
+              if (typeof target === "string") {
+                exportsMap[subpath] = path.resolve(root, target);
+              }
+            }
+            results.push({ name: parsed.name, root, exports: exportsMap });
+          } catch {
+            // Ignore unreadable or malformed package.json files.
+          }
+        }
+      }
+      return results;
+    })().catch((error: unknown) => {
+      // Don't cache a rejection: a transient failure (e.g. findFiles erroring)
+      // would otherwise permanently break resolution until a package.json save.
+      packageExportsCache = undefined;
+      throw error;
+    });
+  }
+  return packageExportsCache;
+}
+
+const workspacePackageExportsPlugin: esbuild.Plugin = {
+  name: "workspace-package-exports",
+  setup(build) {
+    build.onResolve({ filter: /^[^./]/ }, async (args) => {
+      const packages = await findWorkspacePackageExports();
+      for (const pkg of packages) {
+        if (args.path !== pkg.name && !args.path.startsWith(`${pkg.name}/`)) {
+          continue;
+        }
+        const subpath =
+          args.path === pkg.name ? "." : `./${args.path.slice(pkg.name.length + 1)}`;
+        const resolved = pkg.exports[subpath];
+        if (resolved) {
+          return { path: resolved };
+        }
+      }
+      return undefined;
+    });
+  },
+};
+
 async function buildJavaScript(entryPath: string): Promise<string> {
   await ensureEsbuild();
   const result = await esbuild.build({
@@ -518,6 +605,7 @@ async function buildJavaScript(entryPath: string): Promise<string> {
     legalComments: "none",
     drop: ["debugger"],
     logLevel: "silent",
+    plugins: [workspacePackageExportsPlugin],
     // metafile lists the bundled input paths, which we use to strip esbuild's
     // module-boundary comments (e.g. "// ../utils/foo.js") so local file paths
     // are not leaked into the pushed code.

@@ -4,6 +4,16 @@ All notable changes to the "Optimizely Tools" extension are documented in this f
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.1.13] - 2026-07-14
+
+### Fixed
+
+- Bare package-name imports (e.g. `import "my-package/carousel"`) that
+  resolve through a `package.json` `exports` map now build correctly even
+  when the file being pushed lives outside that package's own directory
+  tree. Previously only Node's self-referencing resolution applied, which
+  requires the importing file to be nested under the package root.
+
 ## [0.1.11] - 2026-07-08
 
 ### Changed
